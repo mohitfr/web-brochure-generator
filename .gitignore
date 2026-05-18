@@ -1,0 +1,11 @@
+.env
+__pycache__/
+.Python
+venv/
+.venv/
+
+# outputs 
+*.md
+!README.md
+
+.vscode/
