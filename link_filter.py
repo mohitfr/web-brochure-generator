@@ -9,7 +9,10 @@ model = "gpt-4o-mini"
 load_dotenv(override=True)
 api_key = os.getenv("OPENAI_API_KEY")
 
-client = OpenAI()
+if not api_key:
+    raise ValueError("OPENAI_API_KEY not found in environment variables.")
+
+client = OpenAI(api_key=api_key)
 
 link_system_prompt = """
     You are provided with a list of links found on a webpage.
@@ -55,3 +58,4 @@ def select_relevant_links(url):
     links = json.loads(result)
     print(f"Found {len(links['links'])} relevant links")
     return links
+
