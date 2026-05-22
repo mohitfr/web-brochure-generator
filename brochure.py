@@ -15,9 +15,19 @@ if not os.getenv("OPENAI_API_KEY"):
 client = OpenAI()
 
 
-def fetch_page_and_all_relevant_links(url):
+def fetch_page_and_all_relevant_links(url: str) -> str:
+
+    """
+    Fetch the contents of the page at the given url, 
+    and also fetch the contents of any relevant links on the page.
+    Return the combined contents as a string.
+
+        url: the url of the page to fetch
+    """
+
     contents = fetch_website_contents(url)
     relevant_links = select_relevant_links(url)
+
     result = f"## Landing Page:\n\n{contents}\n## Relevant Links:\n"
 
     for link in relevant_links.get("links", []):
@@ -29,44 +39,86 @@ def fetch_page_and_all_relevant_links(url):
 
     return result
 
-brochure_system_prompt = """
-You are an assistant that analyzes the contents of several relevant pages from a company website
-and creates a short brochure about the company for prospective customers, investors and recruits.
-Respond in markdown without code blocks.
-Include details of company culture, customers and careers/jobs if you have the information.
-"""
+#Different brochure system prompts for different tones of brochure
 
-# A different system prompt for a more humorous brochure - this demonstrates how easy it is to incorporate 'tone':
+brochure_system_prompts = {
+    "Professional": """
+    You are an assistant that analyzes the contents of several relevant pages from a company website
+    and creates a short brochure about the company for prospective customers, investors, and recruits.
+    Respond in markdown without code blocks.
+    Include details of company culture, customers, and careers/jobs if available.
+    """,
+    "Humorous": """
+    You are an assistant that analyzes the contents of several relevant pages from a company website
+    and creates a short, humorous, witty brochure about the company for prospective customers, investors, and recruits.
+    Respond in markdown without code blocks.
+    Include details of company culture, customers, and careers/jobs if available.
+    """,
+    "Concise": """
+    You are an assistant that analyzes the contents of several relevant pages from a company website
+    and creates a very short brochure in bullet points for prospective customers, investors, and recruits.
+    Respond in markdown without code blocks.
+    Keep it brief — no more than 20 bullet points total.
+    """
+}
 
-# brochure_system_prompt = """
-# You are an assistant that analyzes the contents of several relevant pages from a company website
-# and creates a short, humorous, entertaining, witty brochure about the company for prospective customers, investors and recruits.
-# Respond in markdown without code blocks.
-# Include details of company culture, customers and careers/jobs if you have the information.
-# """
 
+def get_brochure_user_prompt(company_name: str, url: str) -> str:   
 
-def get_brochure_user_prompt(company_name, url):
+    """
+    Call the fetch_page_and_all_relevant_links function to get the contents 
+    of the page and relevant links,and then return a user prompt for the brochure creation 
+    that includes the company name and the contents.
+
+        company_name: the name of the company to create a brochure for
+        url: the url of the company's website
+    """
+
+    website_content = fetch_page_and_all_relevant_links(url)
+
     user_prompt = f"""
         You are looking at a company called: {company_name}
         Here are the contents of its landing page and other relevant pages;
-        use this information to build a short brochure of the company in markdown without code blocks.\n\n
+        use this information to build a short brochure of the company in markdown without code blocks.
+
+        {website_content}
         """
-    user_prompt += fetch_page_and_all_relevant_links(url)
-    return user_prompt[:5_000] # Truncate if more than 5,000 characters
+    return user_prompt[:8000]
     
 
-def create_brochure(company_name, url):
-    stream = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": brochure_system_prompt},
-            {"role": "user", "content": get_brochure_user_prompt(company_name, url)}
-        ],
-        stream=True
-    )
+def create_brochure(company_name: str, url: str, tone: str = "Professional"):
 
-    for chunk in stream:
-        result = chunk.choices[0].delta
-        if result and result.content:
-            yield result.content
+    """
+    Create a brochure for the given company based on its website content and the specified tone
+    by calling the OpenAI API with a system prompt and a user prompt.
+
+        company_name: the name of the company to create a brochure for
+        url: the url of the company's website
+        tone: the desired tone for the brochure ("Professional", "Humorous", "Concise")
+    """
+    tone = tone if tone in brochure_system_prompts else "Professional"
+
+    try:
+        yield "Fetching page content..."
+        user_prompt = get_brochure_user_prompt(company_name, url)
+
+        yield "Filtering relevant links..."
+
+        yield "Generating brochure...\n\n"
+
+        stream = client.chat.completions.create(
+            model = model,
+            messages = [
+                {"role": "system", "content": brochure_system_prompts[tone]},
+                {"role": "user", "content": user_prompt}
+            ],
+            stream = True
+        )
+
+        for chunk in stream:
+            result = chunk.choices[0].delta
+            if result and result.content:
+                yield result.content
+
+    except Exception as e:
+        yield f"\n\nSomething went wrong: {str(e)}\n\nPlease check the URL and try again."          
