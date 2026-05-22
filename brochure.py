@@ -7,13 +7,12 @@ from scraper import fetch_website_contents
 model  = "gpt-4o-mini"
 
 load_dotenv(override=True)
-api_key = os.getenv("OPENAI_API_KEY")
 
-if not api_key:
+if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY not found in environment variables.")
 
 
-client = OpenAI(api_key=api_key)
+client = OpenAI()
 
 
 def fetch_page_and_all_relevant_links(url):
@@ -71,11 +70,3 @@ def create_brochure(company_name, url):
         result = chunk.choices[0].delta
         if result and result.content:
             yield result.content
-
-
-if __name__ == "__main__":
-    company_name = input("Enter the company name: ")
-    url = input("Enter the company URL: ")
-    brochure = create_brochure(company_name, url)
-    for chunk in brochure:
-        print(chunk, end="", flush=True)
