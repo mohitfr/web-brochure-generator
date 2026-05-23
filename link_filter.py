@@ -6,11 +6,40 @@ model = "gpt-4o-mini"
 
 client = OpenAI()
 
+brochure_keywords = [
+    "about", "company", "team", "careers", "jobs", "mission",
+    "values", "product", "products", "services", "customers",
+    "clients", "solutions", "contact", "story"
+]
+
 link_system_prompt = """
     You are provided with a list of links found on a webpage.
+
     You are able to decide which of the links would be most relevant to include in a brochure about the company,
-    such as links to an About page, or a Company page, or Careers/Jobs pages.
-    You should respond in JSON as in this example:
+    
+    Select only the links that are most useful for generating a company brochure
+    for prospective customers, investors, and recruits. 
+
+    Prefer links such as:
+    - About
+    - Company
+    - Team
+    - Careers / Jobs
+    - Products / Services
+    - Mission / Values
+    - Customers / Case Studies
+    - Contact
+    - Story / History
+    - Social media links
+
+    Do not include:
+    - Privacy Policy
+    - Terms of Service
+    - Cookie Policy
+    - Login / Signup pages
+    - Email links
+    
+    Return valid JSON in exactly this format
 
     {
         "links": [
@@ -21,7 +50,7 @@ link_system_prompt = """
     """
 
 
-def get_links_user_prompt(url):
+def get_links_user_prompt(url: str) -> str:
 
     """
     Given a url, fetch the links on the webpage and return a user prompt 
@@ -30,22 +59,30 @@ def get_links_user_prompt(url):
         url: the url of the webpage to fetch links from
     """
 
+    links = fetch_website_links(url) 
+
+    if not links:
+        return f"No links found on the webpage {url}"
+    
+    scored_links = sorted(
+        links, 
+        key=lambda link: any(keyword in link.lower() for keyword in brochure_keywords), 
+        reverse=True
+        )
+    top_links = scored_links[:40]
     user_prompt = f"""
         Here is the list of links on the website {url} -
+
         Please decide which of these are relevant web links for a brochure about the company, 
-        respond with the full https URL in JSON format.
-        Do not include Terms of Service, Privacy, email links.
+        Return only full URLs in JSON format.
 
         Links:
-
-        """
-    links = fetch_website_links(url)    
-    user_prompt += "\n".join(links)
+        """+ "\n".join(top_links)
 
     return user_prompt
 
 
-def select_relevant_links(url):
+def select_relevant_links(url: str) -> dict:
 
     """
     Given a url, select the most relevant links for a company brochure
@@ -54,19 +91,41 @@ def select_relevant_links(url):
 
         url: the url of the webpage to select links from
     """
+    try:
+        print(f"Selecting relevant links for {url} by calling {model}")
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": link_system_prompt},
+                {"role": "user", "content": get_links_user_prompt(url)}
+            ],
+            response_format={"type": "json_object"}
+        )
 
-    print(f"Selecting relevant links for {url} by calling {model}")
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": link_system_prompt},
-            {"role": "user", "content": get_links_user_prompt(url)}
-        ],
-        response_format={"type": "json_object"}
-    )
+        result = response.choices[0].message.content
+        data = json.loads(result)
 
-    result = response.choices[0].message.content
-    links = json.loads(result)
-    print(f"Found {len(links['links'])} relevant links")
-    return links
+        links = data.get("links", [])
+        if not isinstance(links, list):
+            return {"links": []}
+        
+        cleaned_links = []
+        seen = set()
+
+        for item in links:
+            if not isinstance(item, dict):
+                continue
+
+            link_type = item.get("type", "relevant page")   
+            link_url = item.get("url", "").strip()
+
+            if not link_url or link_url in seen:
+                continue
+
+            seen.add(link_url)
+            cleaned_links.append({"type": link_type, "url": link_url})
+
+        return {"links": cleaned_links}
+    except Exception as e:
+
 
