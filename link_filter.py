@@ -9,7 +9,8 @@ client = OpenAI()
 brochure_keywords = [
     "about", "company", "team", "careers", "jobs", "mission",
     "values", "product", "products", "services", "customers",
-    "clients", "solutions", "contact", "story"
+    "clients", "solutions", "contact", "story", "case-study",
+    "case-studies", "history", "social", "media", "blog", "news"
 ]
 
 link_system_prompt = """
@@ -47,7 +48,7 @@ link_system_prompt = """
             {"type": "careers page", "url": "https://another.full.url/careers"}
         ]
     }
-    """
+    """.strip()
 
 
 def get_links_user_prompt(url: str) -> str:
@@ -56,7 +57,7 @@ def get_links_user_prompt(url: str) -> str:
     Given a url, fetch the links on the webpage and return a user prompt 
     that includes the links and asks the model to select relevant links for a company brochure. 
 
-        url: the url of the webpage to fetch links from
+        url: the url of the webpage to fetch links from/
     """
 
     links = fetch_website_links(url) 
@@ -91,6 +92,7 @@ def select_relevant_links(url: str) -> dict:
 
         url: the url of the webpage to select links from
     """
+
     try:
         print(f"Selecting relevant links for {url} by calling {model}")
         response = client.chat.completions.create(
@@ -126,6 +128,8 @@ def select_relevant_links(url: str) -> dict:
             cleaned_links.append({"type": link_type, "url": link_url})
 
         return {"links": cleaned_links}
-    except Exception as e:
+    
+    except Exception:
+        return {"links": []}
 
 
