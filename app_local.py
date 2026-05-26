@@ -48,9 +48,12 @@ def generate_brochure(company_name, url, tone):
 
     full_brochure = ""
 
-    for chunk in create_brochure(company_name, url, tone):
-        full_brochure += chunk
-        yield full_brochure, None
+    for is_status, chunk in create_brochure(company_name, url, tone):
+        if is_status:
+            yield chunk, None
+        else:
+            full_brochure += chunk
+            yield full_brochure, None
 
     # save to a temp file once streaming is done
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:

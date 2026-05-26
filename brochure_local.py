@@ -1,7 +1,6 @@
-import os
 from openai import OpenAI
 from scraper import fetch_website_contents
-from link_filter import select_relevant_links
+from link_filter_local import select_relevant_links
 
 model = "llama3.2"
 
@@ -95,12 +94,10 @@ def create_brochure(company_name: str, url: str, tone: str = "Professional"):
     tone = tone if tone in brochure_system_prompts else "Professional"
 
     try:
-        yield "Fetching page content..."
+        yield (True, "Fetching page content...")
         user_prompt = get_brochure_user_prompt(company_name, url)
 
-        yield "Filtering relevant links..."
-
-        yield "Generating brochure...\n\n"
+        yield (True, "Generating brochure...\n\n")
 
         stream = client.chat.completions.create(
             model = model,
@@ -114,9 +111,9 @@ def create_brochure(company_name: str, url: str, tone: str = "Professional"):
         for chunk in stream:
             result = chunk.choices[0].delta
             if result and result.content:
-                yield result.content
+                yield (False, result.content)
 
     except Exception as e:
-        yield f"\n\nSomething went wrong: {str(e)}\n\nMake sure Ollama is running with: ollama serve"
+        yield (False, f"\n\nSomething went wrong: {str(e)}\n\nMake sure Ollama is running with: ollama serve")
 
 

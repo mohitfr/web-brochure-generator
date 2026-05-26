@@ -2,9 +2,12 @@ import json
 from openai import OpenAI
 from scraper import fetch_website_links
 
-model = "gpt-4o-mini"
+model = "llama3.2"
 
-client = OpenAI()
+client = OpenAI(
+    api_key="ollama",
+    base_url="http://localhost:11434/v1",
+)
 
 brochure_keywords = [
     "about", "company", "team", "careers", "jobs", "mission",
@@ -57,19 +60,19 @@ def get_links_user_prompt(url: str) -> str:
     Given a url, fetch the links on the webpage and return a user prompt 
     that includes the links and asks the model to select relevant links for a company brochure. 
 
-        url: the url of the webpage to fetch links from/
+        url: the url of the webpage to fetch links from
     """
 
-    links = fetch_website_links(url) 
+    links = fetch_website_links(url)
 
     if not links:
         return f"No links found on the webpage {url}"
-    
+
     scored_links = sorted(
-        links, 
-        key=lambda link: any(keyword in link.lower() for keyword in brochure_keywords), 
+        links,
+        key=lambda link: any(keyword in link.lower() for keyword in brochure_keywords),
         reverse=True
-        )
+    )
     top_links = scored_links[:40]
     user_prompt = f"""
         Here is the list of links on the website {url} -
@@ -78,7 +81,7 @@ def get_links_user_prompt(url: str) -> str:
         Return only full URLs in JSON format.
 
         Links:
-        """+ "\n".join(top_links)
+        """ + "\n".join(top_links)
 
     return user_prompt
 
@@ -87,30 +90,38 @@ def select_relevant_links(url: str) -> dict:
 
     """
     Given a url, select the most relevant links for a company brochure
-    by calling the OpenAI API with a system prompt and a user prompt that 
-    includes the links on the webpage.
+    by calling a local Ollama model with a system prompt and a user prompt
+    that includes the links on the webpage.
 
         url: the url of the webpage to select links from
     """
 
     try:
-        print(f"Selecting relevant links for {url} by calling {model}")
+        print(f"Selecting relevant links for {url} by calling {model} via Ollama")
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": link_system_prompt},
                 {"role": "user", "content": get_links_user_prompt(url)}
-            ],
-            response_format={"type": "json_object"}
+            ]
         )
 
         result = response.choices[0].message.content
-        data = json.loads(result)
+        
+        # Ollama doesn't support response_format=json_object like OpenAI,
+        # so we extract the JSON manually from the response
+        start = result.find("{")
+        end = result.rfind("}") + 1
+        if start == -1 or end == 0:
+            print("No JSON found in model response")
+            return {"links": []}
+        
+        data = json.loads(result[start:end])
 
         links = data.get("links", [])
         if not isinstance(links, list):
             return {"links": []}
-        
+
         cleaned_links = []
         seen = set()
 
@@ -118,7 +129,7 @@ def select_relevant_links(url: str) -> dict:
             if not isinstance(item, dict):
                 continue
 
-            link_type = item.get("type", "relevant page")   
+            link_type = item.get("type", "relevant page")
             link_url = item.get("url", "").strip()
 
             if not link_url or link_url in seen:
@@ -128,9 +139,7 @@ def select_relevant_links(url: str) -> dict:
             cleaned_links.append({"type": link_type, "url": link_url})
 
         return {"links": cleaned_links}
-    
+
     except Exception as e:
         print(f"Error selecting relevant links: {e}")
         return {"links": []}
-
-
